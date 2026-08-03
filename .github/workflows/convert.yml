@@ -1,0 +1,53 @@
+name: Convert image/pdf -> DXF
+
+on:
+  push:
+    paths:
+      - 'inputs/**'
+  workflow_dispatch:
+    inputs:
+      file_path:
+        description: 'Path to input file inside repo (e.g. inputs/sample.pdf)'
+        required: false
+        default: 'inputs/sample.pdf'
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils tesseract-ocr potrace
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python packages
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run conversion
+        env:
+          INPUT_FILE: ${{ github.event.inputs.file_path || 'inputs/sample.pdf' }}
+        run: |
+          echo "Using input file: ${INPUT_FILE}"
+          if [ ! -f "${INPUT_FILE}" ]; then
+            echo "File ${INPUT_FILE} not found in repo"
+            exit 1
+          fi
+          OUTDIR=out_results
+          mkdir -p $OUTDIR
+          python3 main.py "${INPUT_FILE}" "${OUTDIR}"
+
+      - name: Upload DXF artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dxf-results
+          path: out_results/*.dxf
