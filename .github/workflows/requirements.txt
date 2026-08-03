@@ -1,0 +1,9 @@
+pillow
+opencv-python
+numpy
+pytesseract
+pdf2image
+cairosvg
+svgpathtools
+ezdxf
+scikit-image
