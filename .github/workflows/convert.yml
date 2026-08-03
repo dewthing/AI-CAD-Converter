@@ -36,7 +36,7 @@ jobs:
           if [ -n "${{ github.event.inputs.file_path }}" ]; then
             INPUT_FILE="${{ github.event.inputs.file_path }}"
           else
-            INPUT_FILE="inputs/sample.pdf"
+            INPUT_FILE="inputs/"
           fi
 
           echo "Using input file: ${INPUT_FILE}"
