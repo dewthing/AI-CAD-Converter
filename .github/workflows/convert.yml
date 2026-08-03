@@ -1,53 +1,24 @@
-name: Convert image/pdf -> DXF
-
-on:
-  push:
-    paths:
-      - 'inputs/**'
-  workflow_dispatch:
-    inputs:
-      file_path:
-        description: 'Path to input file inside repo (e.g. inputs/sample.pdf)'
-        required: false
-        default: 'inputs/sample.pdf'
-
-jobs:
-  convert:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Install system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y poppler-utils tesseract-ocr potrace
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install Python packages
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run conversion
+- name: Run conversion
         env:
-          INPUT_FILE: ${{ github.event.inputs.file_path || 'inputs/sample.pdf' }}
+          INPUT_FILE: ${{ github.event.inputs.file_path != '' && github.event.inputs.file_path || 'inputs/sample.pdf' }}
         run: |
           echo "Using input file: ${INPUT_FILE}"
-          if [ ! -f "${INPUT_FILE}" ]; then
-            echo "File ${INPUT_FILE} not found in repo"
+          if [ -f "${INPUT_FILE}" ]; then
+            echo "Found ${INPUT_FILE} in repo"
+            INPUT_LOCAL="${INPUT_FILE}"
+          elif echo "${INPUT_FILE}" | grep -E '^https?://' >/dev/null 2>&1; then
+            echo "INPUT_FILE looks like a URL — attempting to download"
+            wget -q -O /tmp/inputfile "${INPUT_FILE}" || { echo "Download failed"; exit 1; }
+            INPUT_LOCAL=/tmp/inputfile
+          else
+            echo "File ${INPUT_FILE} not found in repo. Available files in inputs/:"
+            ls -la inputs || true
+            echo "If you intended to use a file in the repo, commit it at that path or pass a valid file_path."
             exit 1
           fi
-          OUTDIR=out_results
-          mkdir -p $OUTDIR
-          python3 main.py "${INPUT_FILE}" "${OUTDIR}"
 
-      - name: Upload DXF artifacts
-        uses: actions/upload-artifact@v4
-        with:
+          OUTDIR=out_results
+          mkdir -p "$OUTDIR"
+          python3 main.py "${INPUT_LOCAL}" "${OUTDIR}"
           name: dxf-results
           path: out_results/*.dxf
