@@ -1,24 +1,68 @@
-- name: Run conversion
-        env:
-          INPUT_FILE: ${{ github.event.inputs.file_path != '' && github.event.inputs.file_path || 'inputs/sample.pdf' }}
+# Workflow: Convert input (path or URL) to DXF and upload results
+on:
+  workflow_dispatch:
+    inputs:
+      file_path:
+        description: 'Path in repo (e.g. inputs/sample.pdf) or a URL (https://...) — leave empty to use inputs/sample.pdf'
+        required: false
+        default: ''
+
+name: convert
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies (if any)
         run: |
+          if [ -f requirements.txt ]; then
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+          else
+            echo "No requirements.txt found, skipping install"
+          fi
+
+      - name: Determine input file (from workflow input or default)
+        id: determine
+        run: |
+          # choose input from workflow_dispatch input or default path
+          if [ -n "${{ github.event.inputs.file_path }}" ]; then
+            INPUT_FILE="${{ github.event.inputs.file_path }}"
+          else
+            INPUT_FILE="inputs/sample.pdf"
+          fi
+
           echo "Using input file: ${INPUT_FILE}"
+
           if [ -f "${INPUT_FILE}" ]; then
             echo "Found ${INPUT_FILE} in repo"
-            INPUT_LOCAL="${INPUT_FILE}"
+            echo "input_local=${INPUT_FILE}" >> "$GITHUB_OUTPUT"
           elif echo "${INPUT_FILE}" | grep -E '^https?://' >/dev/null 2>&1; then
-            echo "INPUT_FILE looks like a URL — attempting to download"
+            echo "INPUT_FILE looks like a URL — downloading to /tmp/inputfile"
             wget -q -O /tmp/inputfile "${INPUT_FILE}" || { echo "Download failed"; exit 1; }
-            INPUT_LOCAL=/tmp/inputfile
+            echo "input_local=/tmp/inputfile" >> "$GITHUB_OUTPUT"
           else
             echo "File ${INPUT_FILE} not found in repo. Available files in inputs/:"
             ls -la inputs || true
-            echo "If you intended to use a file in the repo, commit it at that path or pass a valid file_path."
+            echo "Set a valid 'file_path' when running this workflow, or commit the file to the repo at that path."
             exit 1
           fi
 
+      - name: Run conversion
+        run: |
           OUTDIR=out_results
           mkdir -p "$OUTDIR"
-          python3 main.py "${INPUT_LOCAL}" "${OUTDIR}"
+          python3 main.py "${{ steps.determine.outputs.input_local }}" "${OUTDIR}"
+
+      - name: Upload DXF results
+        uses: actions/upload-artifact@v4
+        with:
           name: dxf-results
           path: out_results/*.dxf
